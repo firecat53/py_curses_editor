@@ -6,9 +6,14 @@ entering text, passwords, etc.
 
 Posted by Scott Hansen <firecat4153@gmail.com>
 
+Other Contributors:
+
+    + Yuri D'Elia <yuri.delia@eurac.edu> (Unicode/python2 code from tabview)
+
 Features:
 ---------
-* Python 3.x
+* Python 2.7+, 3+
+* Unicode support
 * Configurable window size and location
 * Text box can have a title and/or an outlined box
 * Text box can be initialized with existing text to edit
@@ -18,7 +23,7 @@ Features:
 Requires: 
 ---------
 
-Python 3+
+Python 2.7+, 3+
 
 Installation:
 -------------
@@ -47,16 +52,16 @@ From curses application with a predefined curses window object (stdscr)::
 Keybindings:
 ------------
 
-===================  =================================================
-**F1**               Show popup help menu
-**F2 or Ctrl-x**     Save and Quit
-**Enter**            Enter new line, or Save and Quit (single line mode)
-**F3 or ESC**        Cancel (no save)
-**Cursor keys**      Movement
-**Home/End**         Beginning or End of current line
-**PageUp/PageDown**  PageUp/PageDown
-**Delete**           Delete character under cursor
-**Ctrl-k**           Delete to end-of-line
-**Ctrl-u**           Delete to beginning-of-line
-===================  =================================================
-
+=====================    ===================================================
+**F1**                   Show popup help menu
+**F2 or Ctrl-x**         Save and Quit
+**Enter**                Enter new line, or Save and Quit (single line mode)
+**F3 or ESC**            Cancel (no save)
+**Cursor keys**          Movement
+**Ctrl-n/p Ctrl-f/b**    Up/down right/left
+**Home/End Ctrl-a/e**    Beginning or End of current line
+**PageUp/PageDown**      PageUp/PageDown
+**Delete Ctrl-d**        Delete character under cursor
+**Backspace Ctrl-h**     Delete character to left
+**Ctrl-k/u**             Delete to end/beginning of-line
+=====================    ===================================================

@@ -1,31 +1,38 @@
-"""Scott Hansen <firecat four one five three at gmail dot com>
+"""Py_curses_editor
 
-Copyright (c) 2013, Scott Hansen
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+Copyright (c) 2015, Scott Hansen <firecat4153@gmail.com>
 
 """
 
 import curses
 import curses.ascii
 import locale
+import string
+import sys
 from textwrap import wrap
+
+
+if sys.version_info.major < 3:
+    # Python 2.7 shim
+    str = unicode
+
+    def CTRL(key):
+        return curses.ascii.ctrl(bytes(key))
+
+    def addstr(*args):
+        scr, args = args[0], list(args[1:])
+        x = 2 if len(args) > 2 else 0
+        args[x] = args[x].encode(sys.stdout.encoding)
+        return scr.addstr(*args)
+
+else:
+    # Python 3 wrappers
+    def CTRL(key):
+        return curses.ascii.ctrl(key)
+
+    def addstr(*args):
+        scr, args = args[0], args[1:]
+        return scr.addstr(*args)
 
 
 class Editor(object):
@@ -60,14 +67,16 @@ class Editor(object):
         from editor.editor import Editor
         Editor(stdscr, win_size=(1,80), pw_mod=True, max_text_size=1)()
 
-    TODO: fix pageup/pagedown for single line text entry
-
     """
 
     def __init__(self, scr, title="", inittext="", win_location=(0, 0),
                  win_size=(20, 80), box=True, max_text_size=0, pw_mode=False):
         self.scr = scr
         self.title = title
+        if sys.version_info.major < 3:
+            enc = locale.getpreferredencoding() or 'utf-8'
+            self.title = str(self.title, encoding=enc)
+            inittext = str(inittext, encoding=enc)
         self.box = box
         self.max_text_size = max_text_size
         self.pw_mode = pw_mode
@@ -75,10 +84,8 @@ class Editor(object):
             curses.curs_set(0)
         else:
             curses.curs_set(1)
-        locale.setlocale(locale.LC_ALL, '')
-        #encoding = locale.getpreferredencoding()
         self.resize_flag = False
-        self.win_location_x, self.win_location_y = win_location
+        self.win_location_y, self.win_location_x = win_location
         self.win_size_orig_y, self.win_size_orig_x = win_size
         self.win_size_y = self.win_size_orig_y
         self.win_size_x = self.win_size_orig_x
@@ -108,14 +115,14 @@ class Editor(object):
             self.boxscr.clear()
             self.boxscr.box()
             if self.title:
-                self.boxscr.addstr(1, 1, self.title, curses.A_BOLD)
-                self.boxscr.addstr(quick_help, curses.A_STANDOUT)
-                self.boxscr.addstr
+                addstr(self.boxscr, 1, 1, self.title, curses.A_BOLD)
+                addstr(self.boxscr, quick_help, curses.A_STANDOUT)
+                # self.boxscr.addstr
             self.boxscr.refresh()
         elif self.title:
             self.boxscr.clear()
-            self.boxscr.addstr(0, 0, self.title, curses.A_BOLD)
-            self.boxscr.addstr(quick_help, curses.A_STANDOUT)
+            addstr(self.boxscr, 0, 0, self.title, curses.A_BOLD)
+            addstr(self.boxscr, quick_help, curses.A_STANDOUT)
             self.boxscr.refresh()
 
     def text_init(self, text):
@@ -149,30 +156,38 @@ class Editor(object):
         """
         self.keys = {
             curses.KEY_BACKSPACE:           self.backspace,
+            CTRL('h'):                      self.backspace,
             curses.KEY_DOWN:                self.down,
+            CTRL('n'):                      self.down,
             curses.KEY_END:                 self.end,
+            CTRL('e'):                      self.end,
             curses.KEY_ENTER:               self.insert_line_or_quit,
             curses.KEY_HOME:                self.home,
+            CTRL('a'):                      self.home,
             curses.KEY_DC:                  self.del_char,
+            CTRL('d'):                      self.del_char,
             curses.KEY_LEFT:                self.left,
+            CTRL('b'):                      self.left,
             curses.KEY_NPAGE:               self.page_down,
             curses.KEY_PPAGE:               self.page_up,
             curses.KEY_RIGHT:               self.right,
+            CTRL('f'):                      self.right,
             curses.KEY_UP:                  self.up,
+            CTRL('p'):                      self.up,
             curses.KEY_F1:                  self.help,
             curses.KEY_F2:                  self.quit,
             curses.KEY_F3:                  self.quit_nosave,
             curses.KEY_RESIZE:              self.resize,
-            curses.ascii.ctrl(ord('x')):    self.quit,
-            curses.ascii.ctrl(ord('u')):    self.del_to_bol,
-            curses.ascii.ctrl(ord('k')):    self.del_to_eol,
+            CTRL('x'):                      self.quit,
+            CTRL('u'):                      self.del_to_bol,
+            CTRL('k'):                      self.del_to_eol,
             curses.ascii.DEL:               self.backspace,
             curses.ascii.NL:                self.insert_line_or_quit,
             curses.ascii.LF:                self.insert_line_or_quit,
             curses.ascii.BS:                self.backspace,
             curses.ascii.ESC:               self.quit_nosave,
             curses.ascii.ETX:               self.close,
-            ord("\n"):                      self.insert_line_or_quit,
+            "\n":                           self.insert_line_or_quit,
             -1:                             self.resize,
         }
 
@@ -288,8 +303,7 @@ class Editor(object):
         line. Stop when the maximum line length is reached.
 
         """
-        c = chr(c)
-        if not c.isprintable():
+        if c not in string.printable:
             return
         line = list(self.text[self.buffer_idx_y])
         line.insert(self.buffer_idx_x, c)
@@ -343,7 +357,7 @@ class Editor(object):
         self.buffer_rows = max(self.win_size_y, len(self.text))
         # Makes sure leftover rows are visually cleared if deleting rows from
         # the bottom of the text.
-        self.stdscr.clear()
+        # self.stdscr.clear()
 
     def del_char(self):
         """Delete character under the cursor.
@@ -404,7 +418,7 @@ class Editor(object):
         # Only print help text if the window is big enough
         try:
             popup = curses.newwin(lines, cols, 0, 0)
-            popup.addstr(1, 1, help_txt)
+            addstr(popup, 1, 1, help_txt)
             popup.box()
         except:
             pass
@@ -415,7 +429,8 @@ class Editor(object):
             # Turn back on the cursor
             if self.pw_mode is False:
                 curses.curs_set(1)
-            # flushinp Needed to prevent spurious F1 characters being written to line
+            # flushinp Needed to prevent spurious F1 characters being written
+            # to line
             curses.flushinp()
             self.box_init()
 
@@ -456,7 +471,7 @@ class Editor(object):
                 self.stdscr.move(y, 0)
                 self.stdscr.clrtoeol()
                 if not self.pw_mode:
-                    self.stdscr.addstr(y, 0, line)
+                    addstr(self.stdscr, y, 0, line)
             except:
                 self.close()
         self.stdscr.refresh()
@@ -465,6 +480,7 @@ class Editor(object):
         self.scr.refresh()
 
     def close(self):
+        self.text = self.text_orig
         curses.endwin()
         curses.flushinp()
         return False
@@ -474,6 +490,9 @@ class Editor(object):
             c = self.stdscr.getch()
         except KeyboardInterrupt:
             return self.close()
+        # 127 is a hack to make sure the Backspace key works properly
+        if 0 < c < 256 and c != 127:
+            c = chr(c)
         try:
             loop = self.keys[c]()
         except KeyError:
@@ -487,4 +506,13 @@ def main(stdscr, **kwargs):
 
 
 def editor(**kwargs):
-    return curses.wrapper(main, **kwargs)
+    if sys.version_info.major < 3:
+        lc_all = locale.getlocale(locale.LC_ALL)
+        locale.setlocale(locale.LC_ALL, '')
+    else:
+        lc_all = None
+    try:
+        return curses.wrapper(main, **kwargs)
+    finally:
+        if lc_all is not None:
+            locale.setlocale(locale.LC_ALL, lc_all)

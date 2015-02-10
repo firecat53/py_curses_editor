@@ -3,7 +3,6 @@
 Copyright (c) 2015, Scott Hansen <firecat4153@gmail.com>
 
 """
-
 import curses
 import curses.ascii
 import locale
@@ -51,8 +50,10 @@ class Editor(object):
         win_location:   tuple (y,x) for location of upper left corner
         win_size:       tuple (rows,cols) size of the editor window
         box:            True/False whether to outline editor with a box
-        max_text_size:  maximum rows allowed size for text.
+        max_text_rows:  maximum rows allowed for text.
                             Default=0 (unlimited)
+                            If initext is longer than max_text_rows, extra
+                            lines _will be truncated_!
         pw_mode:        True/False. Whether or not to show text entry
                             (e.g. for passwords)
 
@@ -78,7 +79,7 @@ class Editor(object):
             self.title = str(self.title, encoding=enc)
             inittext = str(inittext, encoding=enc)
         self.box = box
-        self.max_text_size = max_text_size
+        self.max_text_rows = max_text_rows
         self.pw_mode = pw_mode
         if self.pw_mode is True:
             curses.curs_set(0)
@@ -117,7 +118,6 @@ class Editor(object):
             if self.title:
                 addstr(self.boxscr, 1, 1, self.title, curses.A_BOLD)
                 addstr(self.boxscr, quick_help, curses.A_STANDOUT)
-                # self.boxscr.addstr
             self.boxscr.refresh()
         elif self.title:
             self.boxscr.clear()
@@ -131,7 +131,9 @@ class Editor(object):
 
         """
         t = text.split('\n')
-        t = [wrap(i, self.win_size_x) for i in t]
+        # Use win_size_x - 1 so addstr has one more cell at the end to put the
+        # cursor
+        t = [wrap(i, self.win_size_x - 1) for i in t]
         self.text = []
         for line in t:
             # This retains any empty lines
@@ -144,10 +146,10 @@ class Editor(object):
             self.buffer_cols = max(self.win_size_x,
                                    max([len(i) for i in self.text]))
             self.buffer_rows = max(self.win_size_y, len(self.text))
-        self.text_orig = self.text[:]
-        if self.max_text_size:
-            # Truncates initial text if max_text_size < len(self.text)
-            self.text = self.text[:self.max_text_size]
+        self.text_orig = list(self.text)
+        if self.max_text_rows:
+            # Truncates initial text if max_text_rows < len(self.text)
+            self.text = self.text[:self.max_text_rows]
         self.buf_length = len(self.text[self.buffer_idx_y])
 
     def keys_init(self):
@@ -196,11 +198,13 @@ class Editor(object):
         is resized.
 
         """
-        # self.cur_pos is the current y,x position of the cursor
+        # self.cur_pos is the current y,x position of the cursor relative to
+        # the visible area of the box
         self.cur_pos_y = 0
         self.cur_pos_x = 0
         # y_offset controls the up-down scrolling feature
         self.y_offset = 0
+        # Position of the cursor relative to the upper left corner of the data
         self.buffer_idx_y = 0
         self.buffer_idx_x = 0
         # Adjust win_size if resizing
@@ -211,9 +215,25 @@ class Editor(object):
         # Make sure requested window size is < available window size
         self.max_win_size_y, self.max_win_size_x = self.scr.getmaxyx()
         # Adjust max_win_size for maximum possible offsets
-        # (e.g. if there is a title and a box)
-        self.max_win_size_y = max(0, self.max_win_size_y - 4)
-        self.max_win_size_x = max(0, self.max_win_size_x - 3)
+        # (e.g. if there is a title and/or a box)
+        if self.box and self.title:
+            self.max_win_size_y = max(0, self.max_win_size_y - 3)
+            self.max_win_size_x = max(0, self.max_win_size_x - 2)
+        elif self.box:
+            self.max_win_size_y = max(0, self.max_win_size_y - 2)
+            self.max_win_size_x = max(0, self.max_win_size_x - 2)
+        elif self.title:
+            self.max_win_size_y = max(0, self.max_win_size_y - 1)
+        self._win_scr_init()
+        self.stdscr.keypad(1)
+
+    def _win_scr_init(self):
+        """Initialize the curses window objects  (called from win_init)
+
+            self.stdscr - the text display area
+            self.boxscr - for the box outline and title, if applicable
+
+        """
         # Keep the input box inside the physical window
         if (self.win_size_y > self.max_win_size_y or
                 self.win_size_y < self.win_size_orig_y):
@@ -221,10 +241,6 @@ class Editor(object):
         if (self.win_size_x > self.max_win_size_x or
                 self.win_size_x < self.win_size_orig_x):
             self.win_size_x = self.max_win_size_x
-        # Reduce win_size by 1 to account for position starting at 0 instead of
-        # 1. E.g. if size=80, then the max size should be 79 (0-79).
-        self.win_size_y -= 1
-        self.win_size_x -= 1
         # Validate win_location settings
         if self.win_size_x + self.win_location_x >= self.max_win_size_x:
             self.win_location_x = max(0, self.max_win_size_x -
@@ -235,8 +251,10 @@ class Editor(object):
         # Create an extra window for the box outline and/or title, if required
         x_off = y_off = loc_off_y = loc_off_x = 0
         if self.box:
-            y_off += 3
+            # Compensate for the box lines
+            y_off += 2
             x_off += 2
+            # The box is drawn outside the initially called win_location
             loc_off_y += 1
             loc_off_x += 1
         if self.title:
@@ -257,7 +275,6 @@ class Editor(object):
                                           self.win_size_x,
                                           self.win_location_y,
                                           self.win_location_x)
-        self.stdscr.keypad(1)
 
     def left(self):
         if self.cur_pos_x > 0:
@@ -317,10 +334,10 @@ class Editor(object):
         and exits.
 
         """
-        if self.max_text_size == 1:
+        if self.max_text_rows == 1:
             # Save and quit for single-line entries
             return False
-        if len(self.text) == self.max_text_size:
+        if len(self.text) == self.max_text_rows:
             return
         line = list(self.text[self.buffer_idx_y])
         newline = line[self.cur_pos_x:]
@@ -444,17 +461,20 @@ class Editor(object):
         """Main program loop.
 
         """
-        while True:
-            self.stdscr.move(self.cur_pos_y, self.cur_pos_x)
-            loop = self.get_key()
-            if loop is False:
-                break
-            self.buffer_idx_y = self.cur_pos_y + self.y_offset
-            self.buf_length = len(self.text[self.buffer_idx_y])
-            if self.cur_pos_x > self.buf_length:
-                self.cur_pos_x = self.buf_length
-            self.buffer_idx_x = self.cur_pos_x
-            self.display()
+        try:
+            while True:
+                self.stdscr.move(self.cur_pos_y, self.cur_pos_x)
+                loop = self.get_key()
+                if loop is False:
+                    break
+                self.buffer_idx_y = self.cur_pos_y + self.y_offset
+                self.buf_length = len(self.text[self.buffer_idx_y])
+                if self.cur_pos_x > self.buf_length:
+                    self.cur_pos_x = self.buf_length
+                self.buffer_idx_x = self.cur_pos_x
+                self.display()
+        except KeyboardInterrupt:
+            self.text = self.text_orig
         try:
             curses.curs_set(0)
         except:
@@ -465,15 +485,12 @@ class Editor(object):
         """Display the editor window and the current contents.
 
         """
-        s = self.text[self.y_offset:self.y_offset + self.win_size_y + 1]
+        s = self.text[self.y_offset:self.y_offset + self.win_size_y]
+        self.stdscr.clear()
         for y, line in enumerate(s):
-            try:
-                self.stdscr.move(y, 0)
-                self.stdscr.clrtoeol()
-                if not self.pw_mode:
-                    addstr(self.stdscr, y, 0, line)
-            except:
-                self.close()
+            self.stdscr.move(y, 0)
+            if not self.pw_mode:
+                addstr(self.stdscr, y, 0, line)
         self.stdscr.refresh()
         if self.box:
             self.boxscr.refresh()
@@ -486,10 +503,7 @@ class Editor(object):
         return False
 
     def get_key(self):
-        try:
-            c = self.stdscr.getch()
-        except KeyboardInterrupt:
-            return self.close()
+        c = self.stdscr.getch()
         # 127 is a hack to make sure the Backspace key works properly
         if 0 < c < 256 and c != 127:
             c = chr(c)

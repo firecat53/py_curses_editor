@@ -71,7 +71,7 @@ class Editor(object):
     """
 
     def __init__(self, scr, title="", inittext="", win_location=(0, 0),
-                 win_size=(20, 80), box=True, max_text_size=0, pw_mode=False):
+                 win_size=(20, 80), box=True, max_text_size=0, max_text_rows=0, pw_mode=False):
         self.scr = scr
         self.title = title
         if sys.version_info.major < 3:

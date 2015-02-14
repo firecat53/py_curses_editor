@@ -8,6 +8,7 @@ import curses.ascii
 import locale
 import string
 import sys
+from collections import namedtuple
 from textwrap import wrap
 
 
@@ -56,7 +57,6 @@ class Editor(object):
                             lines _will be truncated_!
         pw_mode:        True/False. Whether or not to show text entry
                             (e.g. for passwords)
-
     Returns:
         text:   text string
 
@@ -66,12 +66,13 @@ class Editor(object):
 
     Usage: (from curses application with a defined curses window object)
         from editor.editor import Editor
-        Editor(stdscr, win_size=(1,80), pw_mod=True, max_text_size=1)()
+        Editor(stdscr, win_size=(1,80), pw_mod=True, max_text_rows=1)()
 
     """
 
     def __init__(self, scr, title="", inittext="", win_location=(0, 0),
-                 win_size=(20, 80), box=True, max_text_size=0, max_text_rows=0, pw_mode=False):
+                 win_size=(20, 80), box=True, max_text_size=0,
+                 max_text_rows=0, pw_mode=False):
         self.scr = scr
         self.title = title
         if sys.version_info.major < 3:
@@ -99,7 +100,7 @@ class Editor(object):
     def __call__(self):
         self.run()
         curses.flushinp()
-        return "\n".join(self.text)
+        return "\n".join(["".join(i) for i in self.text])
 
     def box_init(self):
         """Clear the main screen and redraw the box and/or title
@@ -126,31 +127,40 @@ class Editor(object):
             self.boxscr.refresh()
 
     def text_init(self, text):
-        """Transform text string into a list of strings, wrapped to fit the
-        window size. Sets the dimensions of the text buffer.
+        """Transform text string into a list of list of strings, wrapped to
+        fit the window size. Sets the dimensions of the text buffer. Each
+        paragraph is a new list.
+
+        self.text = [['This is a', 'long paragraph'], ['short one']]
+                            ^this list^ is wrapped together as a paragraph
 
         """
-        t = text.split('\n')
-        # Use win_size_x - 1 so addstr has one more cell at the end to put the
-        # cursor
-        t = [wrap(i, self.win_size_x - 1) for i in t]
-        self.text = []
-        for line in t:
-            # This retains any empty lines
-            if line:
-                self.text.extend(line)
-            else:
-                self.text.append("")
-        if self.text:
-            # Sets size for text buffer...may be larger than win_size!
-            self.buffer_cols = max(self.win_size_x,
-                                   max([len(i) for i in self.text]))
-            self.buffer_rows = max(self.win_size_y, len(self.text))
+        self.text = [self._text_wrap(i) or [""]
+                     for i in text.splitlines() or [""]]
         self.text_orig = list(self.text)
         if self.max_text_rows:
             # Truncates initial text if max_text_rows < len(self.text)
             self.text = self.text[:self.max_text_rows]
-        self.buf_length = len(self.text[self.buffer_idx_y])
+
+    def _text_wrap(self, text):
+        """Given text as a list of text strings, where the list is
+        a paragraph, run wordwrap on the paragraph.
+
+        Args: text - ["str1 asdf", "str2",...]
+        Returns: text ["str1 asdf", "str2",...]
+
+        """
+        # Use win_size_x - 1 so addstr has one more cell at the end to put the
+        # cursor
+        return wrap("".join(text), self.win_size_x - 1,
+                    drop_whitespace=False) or [""]
+
+    @property
+    def flattened_text(self):
+        """Return a flattened self.text (single list of strings)
+
+        """
+        return [j for i in self.text for j in i] or [""]
 
     def keys_init(self):
         """Define methods for each key.
@@ -205,6 +215,7 @@ class Editor(object):
         # y_offset controls the up-down scrolling feature
         self.y_offset = 0
         # Position of the cursor relative to the upper left corner of the data
+        # (self.flattend_text)
         self.buffer_idx_y = 0
         self.buffer_idx_x = 0
         # Adjust win_size if resizing
@@ -214,7 +225,7 @@ class Editor(object):
             self.resize_flag = False
         # Make sure requested window size is < available window size
         self.max_win_size_y, self.max_win_size_x = self.scr.getmaxyx()
-        # Adjust max_win_size for maximum possible offsets
+        # Adjust max_win_size for different possible offsets
         # (e.g. if there is a title and/or a box)
         if self.box and self.title:
             self.max_win_size_y = max(0, self.max_win_size_y - 3)
@@ -279,41 +290,180 @@ class Editor(object):
     def left(self):
         if self.cur_pos_x > 0:
             self.cur_pos_x = self.cur_pos_x - 1
+        elif self.cur_pos_x == 0 and self.buffer_idx_y > 0:
+            self.up()
+            self.end()
+        self._set_buffer_idx_x()
 
     def right(self):
-        if self.cur_pos_x < self.win_size_x:
+        if self.cur_pos_x < self.win_size_x and \
+                self.cur_pos_x < self.buf_line_length:
             self.cur_pos_x = self.cur_pos_x + 1
+        elif self.buffer_idx_y == len(self.flattened_text) - 1:
+            pass
+        else:
+            self.down()
+            self.home()
+        self._set_buffer_idx_x()
 
     def up(self):
         if self.cur_pos_y > 0:
             self.cur_pos_y = self.cur_pos_y - 1
         else:
             self.y_offset = max(0, self.y_offset - 1)
+        self._set_buffer_idx_y()
+        self._set_buffer_idx_x()
 
     def down(self):
-        if (self.cur_pos_y < self.win_size_y - 1 and
-                self.buffer_idx_y < len(self.text) - 1):
+        if self.cur_pos_y < self.win_size_y - 1 and \
+                self.buffer_idx_y < len(self.flattened_text) - 1:
             self.cur_pos_y = self.cur_pos_y + 1
-        elif self.buffer_idx_y == len(self.text) - 1:
+        elif self.buffer_idx_y == len(self.flattened_text) - 1:
             pass
         else:
             self.y_offset = min(self.buffer_rows - self.win_size_y,
                                 self.y_offset + 1)
+        self._set_buffer_idx_y()
+        self._set_buffer_idx_x()
 
     def end(self):
-        self.cur_pos_x = self.buf_length
+        self.cur_pos_x = self.buf_line_length
+        self._set_buffer_idx_x()
 
     def home(self):
         self.cur_pos_x = 0
+        self._set_buffer_idx_x()
 
     def page_up(self):
         self.y_offset = max(0, self.y_offset - self.win_size_y)
+        self._set_buffer_idx_y()
+        self._set_buffer_idx_x()
 
     def page_down(self):
         self.y_offset = min(self.buffer_rows - self.win_size_y - 1,
                             self.y_offset + self.win_size_y)
         # Corrects negative offsets
         self.y_offset = max(0, self.y_offset)
+        self._set_buffer_idx_y()
+        self._set_buffer_idx_x()
+
+    @property
+    def line(self):
+        """Return current line (paragraph) as a string
+
+        """
+        return "".join(self.text[self.paragraph.para_index])
+
+    @line.setter
+    def line(self, value):
+        """Set current displayed paragraph and word wrap it.
+
+        Args: value - string
+
+        """
+        p_idx, l_idx, _ = self.paragraph
+        self.text[p_idx] = self._text_wrap([value])
+
+    def _char_index_to_yx(self, para_index, char_index):
+        """Given the char_index for a paragraph, set buffer_idx_y,
+        buffer_idx_x, cur_pos_y and cur_pos_x
+
+        """
+        line_idx = c_index = 0
+        done = False
+        for line_idx, line in enumerate(self.text[para_index]):
+            x_pos = 0
+            for c in line:
+                if c_index == char_index:
+                    done = True
+                    break
+                c_index += 1
+                x_pos += 1
+            if done is True:
+                break
+        self.buffer_idx_x = x_pos
+        prev_paras_len = sum(map(len, self.text[:para_index]))
+        self.buffer_idx_y = prev_paras_len + line_idx
+        while self.buffer_idx_y - self.y_offset >= self.win_size_y:
+            self.y_offset += 1
+        while self.buffer_idx_y - self.y_offset < 0:
+            self.y_offset -= 1
+        self.cur_pos_y = self.buffer_idx_y - self.y_offset
+        self.cur_pos_x = self.buffer_idx_x
+
+    @property
+    def paragraph(self):
+        """Return the index within self.text of the current paragraph and of
+        the current line and current character (number of characters since the
+        start of the paragraph) within the paragraph
+
+        Returns: namedtuple (para_index, line_index, char_index)
+
+        """
+        idx_para = idx_buffer = idx_line = idx_char = 0
+        done = False
+        for para in self.text:
+            for idx_line, line in enumerate(para):
+                if idx_buffer == self.buffer_idx_y:
+                    done = True
+                    break
+                idx_buffer += 1
+            if done is True:
+                break
+            idx_para += 1
+        idx_char = sum(map(len, self.text[idx_para][:idx_line])) + \
+            self.buffer_idx_x
+        p = namedtuple("para", ['para_index', 'line_index', 'char_index'])
+        return p(idx_para, idx_line, idx_char)
+
+    @property
+    def line_length(self):
+        """Return the string length of the current complete line (paragraph)
+
+        """
+        return len(self.line)
+
+    @property
+    def buf_line(self):
+        """Return a string for the current display buffer row
+
+        """
+        return self.flattened_text[self.buffer_idx_y]
+
+    @property
+    def buf_line_length(self):
+        """Return the string length of the current single displayed row
+
+        """
+        return len(self.buf_line)
+
+    @property
+    def buffer_rows(self):
+        """Return length of text buffer or visible window length, whichever is
+        greater.
+
+        """
+        return max(self.win_size_y, len(self.flattened_text))
+
+    def _set_buffer_idx_y(self):
+        """Set buffer_idx_y (y position in self.flattened_text)
+
+        """
+        if self.cur_pos_y + self.y_offset > len(self.flattened_text) - 1:
+            self.buffer_idx_y = len(self.flattened_text)
+        else:
+            self.buffer_idx_y = self.cur_pos_y + self.y_offset
+
+    def _set_buffer_idx_x(self):
+        """Set buffer_idx_x (x position in self.flattened_text
+
+        This doesn't matter much right now because it will always be the same
+        as self.cur_pos_x because we don't have side-scrolling yet.
+
+        """
+        if self.cur_pos_x > self.buf_line_length:
+            self.cur_pos_x = self.buf_line_length
+        self.buffer_idx_x = self.cur_pos_x
 
     def insert_char(self, c):
         """Given an integer character, insert that character in the current
@@ -322,11 +472,12 @@ class Editor(object):
         """
         if c not in string.printable:
             return
-        line = list(self.text[self.buffer_idx_y])
-        line.insert(self.buffer_idx_x, c)
-        if len(line) < self.win_size_x:
-            self.text[self.buffer_idx_y] = "".join(line)
-            self.cur_pos_x += 1
+        para_idx, line_idx, char_idx = self.paragraph
+        line = list(self.line)
+        line.insert(char_idx, c)
+        char_idx += 1
+        self.line = "".join(line)
+        self._char_index_to_yx(para_idx, char_idx)
 
     def insert_line_or_quit(self):
         """Insert a new line at the cursor. Wrap text from the cursor to the
@@ -337,70 +488,72 @@ class Editor(object):
         if self.max_text_rows == 1:
             # Save and quit for single-line entries
             return False
-        if len(self.text) == self.max_text_rows:
+        if len(self.flattened_text) == self.max_text_rows:
             return
-        line = list(self.text[self.buffer_idx_y])
-        newline = line[self.cur_pos_x:]
-        line = line[:self.cur_pos_x]
-        self.text[self.buffer_idx_y] = "".join(line)
-        self.text.insert(self.buffer_idx_y + 1, "".join(newline))
-        self.buffer_rows = max(self.win_size_y, len(self.text))
-        self.cur_pos_x = 0
-        self.down()
+        p_idx, _, c_idx = self.paragraph
+        newline = self.line[c_idx:]
+        line = self.line[:c_idx]
+        self.text[p_idx] = self._text_wrap([line])
+        self.text.insert(p_idx + 1, self._text_wrap([newline]))
+        self._char_index_to_yx(p_idx + 1, 0)
 
     def backspace(self):
-        """Delete character under cursor and move one space left.
+        """Delete character to the left of the cursor and move one space left.
 
         """
-        line = list(self.text[self.buffer_idx_y])
-        if self.cur_pos_x > 0:
-            if self.cur_pos_x <= len(line):
-                # Just backspace if beyond the end of the actual string
-                del line[self.buffer_idx_x - 1]
-            self.text[self.buffer_idx_y] = "".join(line)
-            self.cur_pos_x -= 1
-        elif self.cur_pos_x == 0:
-            # If at BOL, move cursor to end of previous line
-            # (unless already at top of file)
-            # If current or previous line is empty, delete it
-            if self.y_offset > 0 or self.cur_pos_y > 0:
-                self.cur_pos_x = len(self.text[self.buffer_idx_y - 1])
-            if not self.text[self.buffer_idx_y]:
-                if len(self.text) > 1:
-                    del self.text[self.buffer_idx_y]
-            elif not self.text[self.buffer_idx_y - 1]:
-                del self.text[self.buffer_idx_y - 1]
-            self.up()
-        self.buffer_rows = max(self.win_size_y, len(self.text))
-        # Makes sure leftover rows are visually cleared if deleting rows from
-        # the bottom of the text.
-        # self.stdscr.clear()
+        para_idx, line_idx, char_idx = self.paragraph
+        line = list(self.line)
+        if char_idx > 0:
+            del line[char_idx - 1]
+            char_idx -= 1
+            self.line = "".join(line)
+        elif para_idx > 0 and char_idx == 0:
+            oldline = "".join(self.text[para_idx - 1])
+            newline = oldline + "".join(line)
+            self.text[para_idx - 1] = self._text_wrap([newline])
+            del self.text[para_idx]
+            char_idx = len(oldline)
+            para_idx -= 1
+        else:
+            pass
+        self._char_index_to_yx(para_idx, char_idx)
 
     def del_char(self):
         """Delete character under the cursor.
 
         """
-        line = list(self.text[self.buffer_idx_y])
-        if line and self.cur_pos_x < len(line):
-            del line[self.buffer_idx_x]
-        self.text[self.buffer_idx_y] = "".join(line)
+        para_idx, line_idx, char_idx = self.paragraph
+        line = list(self.line)
+        if line and char_idx < len(line):
+            del line[char_idx]
+            self.line = "".join(line)
+        elif char_idx == len(line) and para_idx < len(self.text):
+            nextline = "".join(self.text[para_idx + 1])
+            self.line = "".join("".join(line) + nextline)
+            del self.text[para_idx + 1]
+        else:
+            pass
+        self._char_index_to_yx(para_idx, char_idx)
 
     def del_to_eol(self):
         """Delete from cursor to end of current line. (C-k)
 
         """
-        line = list(self.text[self.buffer_idx_y])
-        line = line[:self.cur_pos_x]
-        self.text[self.buffer_idx_y] = "".join(line)
+        para_idx, line_idx, char_idx = self.paragraph
+        start = self.line[:char_idx]
+        clip_len = self.win_size_x - 1 - self.buffer_idx_x
+        end = self.line[char_idx + clip_len:]
+        self.line = start + end
 
     def del_to_bol(self):
         """Delete from cursor to beginning of current line. (C-u)
 
         """
-        line = list(self.text[self.buffer_idx_y])
-        line = line[self.cur_pos_x:]
-        self.text[self.buffer_idx_y] = "".join(line)
-        self.cur_pos_x = 0
+        para_idx, line_idx, char_idx = self.paragraph
+        start = self.line[:char_idx - self.buffer_idx_x]
+        end = self.line[char_idx:]
+        self.line = start + end
+        self._char_index_to_yx(para_idx, char_idx - self.buffer_idx_x)
 
     def quit(self):
         return False
@@ -415,7 +568,7 @@ class Editor(object):
         """
         help_txt = """
         Save and exit                               : F2 or Ctrl-x
-                                       (Enter if single-line entry)
+                                    (Enter if single-line entry)
         Exit without saving                         : F3 or ESC
         Cursor movement                             : Arrow keys
         Move to beginning of line                   : Home
@@ -455,7 +608,7 @@ class Editor(object):
         self.resize_flag = True
         self.win_init()
         self.box_init()
-        self.text_init("\n".join(self.text))
+        self.text_init("\n".join(["".join(i) for i in self.text]))
 
     def run(self):
         """Main program loop.
@@ -467,11 +620,6 @@ class Editor(object):
                 loop = self.get_key()
                 if loop is False:
                     break
-                self.buffer_idx_y = self.cur_pos_y + self.y_offset
-                self.buf_length = len(self.text[self.buffer_idx_y])
-                if self.cur_pos_x > self.buf_length:
-                    self.cur_pos_x = self.buf_length
-                self.buffer_idx_x = self.cur_pos_x
                 self.display()
         except KeyboardInterrupt:
             self.text = self.text_orig
@@ -479,22 +627,20 @@ class Editor(object):
             curses.curs_set(0)
         except:
             print('Invisible cursor not supported.')
-        return "\n".join(self.text)
+        return "\n".join(["".join(i) for i in self.text])
 
     def display(self):
         """Display the editor window and the current contents.
 
         """
-        s = self.text[self.y_offset:self.y_offset + self.win_size_y]
+        s = self.flattened_text[self.y_offset:self.y_offset
+                                + self.win_size_y]
         self.stdscr.clear()
         for y, line in enumerate(s):
             self.stdscr.move(y, 0)
             if not self.pw_mode:
                 addstr(self.stdscr, y, 0, line)
         self.stdscr.refresh()
-        if self.box:
-            self.boxscr.refresh()
-        self.scr.refresh()
 
     def close(self):
         self.text = self.text_orig

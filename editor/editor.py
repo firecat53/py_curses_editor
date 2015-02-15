@@ -74,10 +74,10 @@ class Editor(object):
                  win_size=(20, 80), box=True, max_text_size=0,
                  max_text_rows=0, pw_mode=False):
         self.scr = scr
-        self.title = title
+        self.title_orig = title
         if sys.version_info.major < 3:
             enc = locale.getpreferredencoding() or 'utf-8'
-            self.title = str(self.title, encoding=enc)
+            self.title_orig = str(self.title_orig, encoding=enc)
             inittext = str(inittext, encoding=enc)
         self.box = box
         self.max_text_rows = max_text_rows
@@ -102,107 +102,6 @@ class Editor(object):
         curses.flushinp()
         return "\n".join(["".join(i) for i in self.text])
 
-    def box_init(self):
-        """Clear the main screen and redraw the box and/or title
-
-        """
-        # Touchwin seems to save the underlying screen and refreshes it (for
-        # example when the help popup is drawn and cleared again)
-        self.scr.touchwin()
-        self.scr.refresh()
-        self.stdscr.clear()
-        self.stdscr.refresh()
-        quick_help = "   (F2 or Enter: Save, F3: Cancel)"
-        if self.box is True:
-            self.boxscr.clear()
-            self.boxscr.box()
-            if self.title:
-                addstr(self.boxscr, 1, 1, self.title, curses.A_BOLD)
-                addstr(self.boxscr, quick_help, curses.A_STANDOUT)
-            self.boxscr.refresh()
-        elif self.title:
-            self.boxscr.clear()
-            addstr(self.boxscr, 0, 0, self.title, curses.A_BOLD)
-            addstr(self.boxscr, quick_help, curses.A_STANDOUT)
-            self.boxscr.refresh()
-
-    def text_init(self, text):
-        """Transform text string into a list of list of strings, wrapped to
-        fit the window size. Sets the dimensions of the text buffer. Each
-        paragraph is a new list.
-
-        self.text = [['This is a', 'long paragraph'], ['short one']]
-                            ^this list^ is wrapped together as a paragraph
-
-        """
-        self.text = [self._text_wrap(i) or [""]
-                     for i in text.splitlines() or [""]]
-        self.text_orig = list(self.text)
-        if self.max_text_rows:
-            # Truncates initial text if max_text_rows < len(self.text)
-            self.text = self.text[:self.max_text_rows]
-
-    def _text_wrap(self, text):
-        """Given text as a list of text strings, where the list is
-        a paragraph, run wordwrap on the paragraph.
-
-        Args: text - ["str1 asdf", "str2",...]
-        Returns: text ["str1 asdf", "str2",...]
-
-        """
-        # Use win_size_x - 1 so addstr has one more cell at the end to put the
-        # cursor
-        return wrap("".join(text), self.win_size_x - 1,
-                    drop_whitespace=False) or [""]
-
-    @property
-    def flattened_text(self):
-        """Return a flattened self.text (single list of strings)
-
-        """
-        return [j for i in self.text for j in i] or [""]
-
-    def keys_init(self):
-        """Define methods for each key.
-
-        """
-        self.keys = {
-            curses.KEY_BACKSPACE:           self.backspace,
-            CTRL('h'):                      self.backspace,
-            curses.KEY_DOWN:                self.down,
-            CTRL('n'):                      self.down,
-            curses.KEY_END:                 self.end,
-            CTRL('e'):                      self.end,
-            curses.KEY_ENTER:               self.insert_line_or_quit,
-            curses.KEY_HOME:                self.home,
-            CTRL('a'):                      self.home,
-            curses.KEY_DC:                  self.del_char,
-            CTRL('d'):                      self.del_char,
-            curses.KEY_LEFT:                self.left,
-            CTRL('b'):                      self.left,
-            curses.KEY_NPAGE:               self.page_down,
-            curses.KEY_PPAGE:               self.page_up,
-            curses.KEY_RIGHT:               self.right,
-            CTRL('f'):                      self.right,
-            curses.KEY_UP:                  self.up,
-            CTRL('p'):                      self.up,
-            curses.KEY_F1:                  self.help,
-            curses.KEY_F2:                  self.quit,
-            curses.KEY_F3:                  self.quit_nosave,
-            curses.KEY_RESIZE:              self.resize,
-            CTRL('x'):                      self.quit,
-            CTRL('u'):                      self.del_to_bol,
-            CTRL('k'):                      self.del_to_eol,
-            curses.ascii.DEL:               self.backspace,
-            curses.ascii.NL:                self.insert_line_or_quit,
-            curses.ascii.LF:                self.insert_line_or_quit,
-            curses.ascii.BS:                self.backspace,
-            curses.ascii.ESC:               self.quit_nosave,
-            curses.ascii.ETX:               self.close,
-            "\n":                           self.insert_line_or_quit,
-            -1:                             self.resize,
-        }
-
     def win_init(self):
         """Set initial editor window size parameters, and reset them if window
         is resized.
@@ -210,6 +109,7 @@ class Editor(object):
         """
         # self.cur_pos is the current y,x position of the cursor relative to
         # the visible area of the box
+        self.title, self.title_help = self._title_init()
         self.cur_pos_y = 0
         self.cur_pos_x = 0
         # y_offset controls the up-down scrolling feature
@@ -287,6 +187,116 @@ class Editor(object):
                                           self.win_location_y,
                                           self.win_location_x)
 
+    def text_init(self, text):
+        """Transform text string into a list of list of strings, wrapped to
+        fit the window size. Sets the dimensions of the text buffer. Each
+        paragraph is a new list.
+
+        self.text = [['This is a', 'long paragraph'], ['short one']]
+                            ^this list^ is wrapped together as a paragraph
+
+        """
+        self.text = [self._text_wrap(i) or [""]
+                     for i in text.splitlines() or [""]]
+        self.text_orig = list(self.text)
+        if self.max_text_rows:
+            # Truncates initial text if max_text_rows < len(self.text)
+            self.text = self.text[:self.max_text_rows]
+
+    def box_init(self):
+        """Clear the main screen and redraw the box and/or title
+
+        """
+        # Touchwin seems to save the underlying screen and refreshes it (for
+        # example when the help popup is drawn and cleared again)
+        self.scr.touchwin()
+        self.scr.refresh()
+        self.stdscr.clear()
+        self.stdscr.refresh()
+        if self.box is True:
+            self.boxscr.clear()
+            self.boxscr.box()
+            if self.title:
+                addstr(self.boxscr, 1, 1, self.title, curses.A_BOLD)
+                addstr(self.boxscr, self.title_help, curses.A_STANDOUT)
+            self.boxscr.refresh()
+        elif self.title:
+            self.boxscr.clear()
+            addstr(self.boxscr, 0, 0, self.title, curses.A_BOLD)
+            addstr(self.boxscr, self.title_help, curses.A_STANDOUT)
+            self.boxscr.refresh()
+
+    def keys_init(self):
+        """Define methods for each key.
+
+        """
+        self.keys = {
+            curses.KEY_BACKSPACE:           self.backspace,
+            CTRL('h'):                      self.backspace,
+            curses.KEY_DOWN:                self.down,
+            CTRL('n'):                      self.down,
+            curses.KEY_END:                 self.end,
+            CTRL('e'):                      self.end,
+            curses.KEY_ENTER:               self.insert_line_or_quit,
+            curses.KEY_HOME:                self.home,
+            CTRL('a'):                      self.home,
+            curses.KEY_DC:                  self.del_char,
+            CTRL('d'):                      self.del_char,
+            curses.KEY_LEFT:                self.left,
+            CTRL('b'):                      self.left,
+            curses.KEY_NPAGE:               self.page_down,
+            curses.KEY_PPAGE:               self.page_up,
+            curses.KEY_RIGHT:               self.right,
+            CTRL('f'):                      self.right,
+            curses.KEY_UP:                  self.up,
+            CTRL('p'):                      self.up,
+            curses.KEY_F1:                  self.help,
+            curses.KEY_F2:                  self.quit,
+            curses.KEY_F3:                  self.quit_nosave,
+            curses.KEY_RESIZE:              self.resize,
+            CTRL('x'):                      self.quit,
+            CTRL('u'):                      self.del_to_bol,
+            CTRL('k'):                      self.del_to_eol,
+            curses.ascii.DEL:               self.backspace,
+            curses.ascii.NL:                self.insert_line_or_quit,
+            curses.ascii.LF:                self.insert_line_or_quit,
+            curses.ascii.BS:                self.backspace,
+            curses.ascii.ESC:               self.quit_nosave,
+            curses.ascii.ETX:               self.close,
+            "\n":                           self.insert_line_or_quit,
+            -1:                             self.resize,
+        }
+
+    def _title_init(self):
+        """Initialze box title and help string
+
+        """
+        self.title = self.title_orig[:self.win_size_x]
+        if len(self.title) >= self.win_size_x:
+            self.title = self.title[:-3] + ".."
+        if self.max_text_rows == 1:
+            quick_help = "   F2/Enter/^s: Save, F3/ESC/^q: Cancel"
+        else:
+            quick_help = "   F2/^s: Save, F3/ESC/^q: Cancel"
+        if len(self.title) + len(quick_help) > self.win_size_x - 2:
+            return self.title, quick_help[:self.win_size_x -
+                                          len(self.title) - 3] + ".."
+        else:
+            return self.title, quick_help
+
+    def _text_wrap(self, text):
+        """Given text as a list of text strings, where the list is
+        a paragraph, run wordwrap on the paragraph.
+
+        Args: text - ["str1 asdf", "str2",...]
+        Returns: text ["str1 asdf", "str2",...]
+
+        """
+        # Use win_size_x - 1 so addstr has one more cell at the end to put the
+        # cursor
+        return wrap("".join(text), self.win_size_x - 1,
+                    drop_whitespace=False) or [""]
+
     def left(self):
         if self.cur_pos_x > 0:
             self.cur_pos_x = self.cur_pos_x - 1
@@ -363,6 +373,13 @@ class Editor(object):
         """
         p_idx, l_idx, _ = self.paragraph
         self.text[p_idx] = self._text_wrap([value])
+
+    @property
+    def flattened_text(self):
+        """Return a flattened self.text (single list of strings)
+
+        """
+        return [j for i in self.text for j in i] or [""]
 
     def _char_index_to_yx(self, para_index, char_index):
         """Given the char_index for a paragraph, set buffer_idx_y,
@@ -676,3 +693,6 @@ def editor(**kwargs):
     finally:
         if lc_all is not None:
             locale.setlocale(locale.LC_ALL, lc_all)
+
+
+editor.__doc__ = Editor.__doc__

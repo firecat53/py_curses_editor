@@ -8,7 +8,7 @@ Posted by Scott Hansen <firecat4153@gmail.com>
 
 Other Contributors:
 
-    + Yuri D'Elia <yuri.delia@eurac.edu> (Unicode/python2 code from tabview)
+    + Yuri D'Elia <wavexx@thregr.org> (Unicode/python2 code from tabview)
 
 Features:
 ---------
@@ -52,16 +52,16 @@ From curses application with a predefined curses window object (stdscr)::
 Keybindings:
 ------------
 
-=====================    ===================================================
+=====================    ====================================================
 **F1**                   Show popup help menu
 **F2 or Ctrl-x**         Save and Quit
-**Enter**                Enter new line, or Save and Quit (single line mode)
-**F3 or ESC**            Cancel (no save)
+**Enter**                Enter new line, or Save and Quit in single line mode
+**F3, Ctrl-c or ESC**    Cancel (no save)
 **Cursor keys**          Movement
 **Ctrl-n/p Ctrl-f/b**    Up/down right/left
 **Home/End Ctrl-a/e**    Beginning or End of current line
 **PageUp/PageDown**      PageUp/PageDown
-**Delete Ctrl-d**        Delete character under cursor
-**Backspace Ctrl-h**     Delete character to left
+**Delete/Ctrl-d**        Delete character under cursor
+**Backspace/Ctrl-h**     Delete character to left
 **Ctrl-k/u**             Delete to end/beginning of-line
 =====================    ===================================================

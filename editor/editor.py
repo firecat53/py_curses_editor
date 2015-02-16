@@ -233,38 +233,38 @@ class Editor(object):
         self.keys = {
             curses.KEY_BACKSPACE:           self.backspace,
             CTRL('h'):                      self.backspace,
+            curses.ascii.BS:                self.backspace,
+            curses.ascii.DEL:               self.backspace,
+            curses.ascii.ETX:               self.close,
+            curses.KEY_DC:                  self.del_char,
+            CTRL('d'):                      self.del_char,
+            CTRL('u'):                      self.del_to_bol,
+            CTRL('k'):                      self.del_to_eol,
             curses.KEY_DOWN:                self.down,
             CTRL('n'):                      self.down,
             curses.KEY_END:                 self.end,
             CTRL('e'):                      self.end,
-            curses.KEY_ENTER:               self.insert_line_or_quit,
+            curses.KEY_F1:                  self.help,
             curses.KEY_HOME:                self.home,
             CTRL('a'):                      self.home,
-            curses.KEY_DC:                  self.del_char,
-            CTRL('d'):                      self.del_char,
+            curses.KEY_ENTER:               self.insert_line_or_quit,
+            curses.ascii.NL:                self.insert_line_or_quit,
+            curses.ascii.LF:                self.insert_line_or_quit,
+            "\n":                           self.insert_line_or_quit,
             curses.KEY_LEFT:                self.left,
             CTRL('b'):                      self.left,
             curses.KEY_NPAGE:               self.page_down,
             curses.KEY_PPAGE:               self.page_up,
+            CTRL('x'):                      self.quit,
+            curses.KEY_F2:                  self.quit,
+            curses.KEY_F3:                  self.quit_nosave,
+            curses.ascii.ESC:               self.quit_nosave,
+            curses.KEY_RESIZE:              self.resize,
+            -1:                             self.resize,
             curses.KEY_RIGHT:               self.right,
             CTRL('f'):                      self.right,
             curses.KEY_UP:                  self.up,
             CTRL('p'):                      self.up,
-            curses.KEY_F1:                  self.help,
-            curses.KEY_F2:                  self.quit,
-            curses.KEY_F3:                  self.quit_nosave,
-            curses.KEY_RESIZE:              self.resize,
-            CTRL('x'):                      self.quit,
-            CTRL('u'):                      self.del_to_bol,
-            CTRL('k'):                      self.del_to_eol,
-            curses.ascii.DEL:               self.backspace,
-            curses.ascii.NL:                self.insert_line_or_quit,
-            curses.ascii.LF:                self.insert_line_or_quit,
-            curses.ascii.BS:                self.backspace,
-            curses.ascii.ESC:               self.quit_nosave,
-            curses.ascii.ETX:               self.close,
-            "\n":                           self.insert_line_or_quit,
-            -1:                             self.resize,
         }
 
     def _title_init(self):
@@ -275,9 +275,9 @@ class Editor(object):
         if len(self.title) >= self.win_size_x:
             self.title = self.title[:-3] + ".."
         if self.max_text_rows == 1:
-            quick_help = "   F2/Enter/^s: Save, F3/ESC/^q: Cancel"
+            quick_help = "   F2/Enter/^x: Save, F3/ESC/^c: Cancel"
         else:
-            quick_help = "   F2/^s: Save, F3/ESC/^q: Cancel"
+            quick_help = "   F2/^x: Save, F3/ESC/^c: Cancel"
         if len(self.title) + len(quick_help) > self.win_size_x - 2:
             return self.title, quick_help[:self.win_size_x -
                                           len(self.title) - 3] + ".."
@@ -544,7 +544,7 @@ class Editor(object):
         if line and char_idx < len(line):
             del line[char_idx]
             self.line = "".join(line)
-        elif char_idx == len(line) and para_idx < len(self.text):
+        elif char_idx == len(line) and para_idx < len(self.text) - 1:
             nextline = "".join(self.text[para_idx + 1])
             self.line = "".join("".join(line) + nextline)
             del self.text[para_idx + 1]
@@ -558,7 +558,7 @@ class Editor(object):
         """
         para_idx, line_idx, char_idx = self.paragraph
         start = self.line[:char_idx]
-        clip_len = self.win_size_x - 1 - self.buffer_idx_x
+        clip_len = self.buf_line_length - self.buffer_idx_x
         end = self.line[char_idx + clip_len:]
         self.line = start + end
 
@@ -650,14 +650,25 @@ class Editor(object):
         """Display the editor window and the current contents.
 
         """
-        s = self.flattened_text[self.y_offset:self.y_offset
-                                + self.win_size_y]
         self.stdscr.clear()
-        for y, line in enumerate(s):
-            self.stdscr.move(y, 0)
-            if not self.pw_mode:
-                addstr(self.stdscr, y, 0, line)
-        self.stdscr.refresh()
+        y_idx = display_idx = 0
+        done = False
+        for para in self.text:
+            for line in para:
+                if y_idx >= self.y_offset and display_idx < self.win_size_y:
+                    if not self.pw_mode:
+                        addstr(self.stdscr, display_idx, 0, line)
+                    display_idx += 1
+                elif display_idx >= self.win_size_y:
+                    done = True
+                    break
+                y_idx += 1
+            if done is True:
+                break
+            if len(self.text) > 1:
+                # Show an end of paragraph marker.
+                self.stdscr.insch(display_idx - 1, self.win_size_x - 1,
+                                  curses.ACS_LARROW)
 
     def close(self):
         self.text = self.text_orig
@@ -667,8 +678,8 @@ class Editor(object):
 
     def get_key(self):
         c = self.stdscr.getch()
-        # 127 is a hack to make sure the Backspace key works properly
-        if 0 < c < 256 and c != 127:
+        # 127 and 27 are to make sure the Backspace/ESC keys work properly
+        if 0 < c < 256 and c != 127 and c != 27:
             c = chr(c)
         try:
             loop = self.keys[c]()

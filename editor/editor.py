@@ -4,6 +4,7 @@ Copyright (c) 2015, Scott Hansen <firecat4153@gmail.com>
 
 """
 import curses
+import _curses
 import curses.ascii
 import locale
 import string
@@ -82,10 +83,6 @@ class Editor(object):
         self.box = box
         self.max_text_rows = max_text_rows
         self.pw_mode = pw_mode
-        if self.pw_mode is True:
-            curses.curs_set(0)
-        else:
-            curses.curs_set(1)
         self.resize_flag = False
         self.win_location_y, self.win_location_x = win_location
         self.win_size_orig_y, self.win_size_orig_x = win_size
@@ -137,6 +134,15 @@ class Editor(object):
             self.max_win_size_y = max(0, self.max_win_size_y - 1)
         self._win_scr_init()
         self.stdscr.keypad(1)
+        try:
+            curses.use_default_colors()
+        except _curses.error:
+            pass
+        if self.pw_mode is True:
+            try:
+                curses.curs_set(0)
+            except _curses.error:
+                pass
 
     def _win_scr_init(self):
         """Initialize the curses window objects  (called from win_init)
@@ -583,31 +589,31 @@ class Editor(object):
         """Display help text popup window.
 
         """
-        help_txt = """
-        Save and exit                               : F2 or Ctrl-x
-                                    (Enter if single-line entry)
-        Exit without saving                         : F3 or ESC
-        Cursor movement                             : Arrow keys
-        Move to beginning of line                   : Home
-        Move to end of line                         : End
-        Page Up/Page Down                           : PgUp/PgDn
-        Backspace/Delete one char left of cursor    : Backspace
-        Delete 1 char under cursor                  : Del
-        Insert line at cursor                       : Enter
-        Delete to end of line                       : Ctrl-k
-        Delete to beginning of line                 : Ctrl-u
-        Help                                        : F1
-        """
-        curses.curs_set(0)
+        help_txt = (" Save and exit         : F2 or Ctrl-x\n"
+                    "            (Enter if in single-line entry mode)\n"
+                    " Exit (no save)        : F3, Ctrl-c or ESC\n"
+                    " Cursor movement       : Arrow keys/Ctrl-f/b/n/p\n"
+                    " Beginning of line     : Home/Ctrl-a\n"
+                    " End of line           : End/Ctrl-e\n"
+                    " Page Up/Page Down     : PgUp/PgDn\n"
+                    " Backspace/Delete      : Backspace/Ctrl-h\n"
+                    " Delete current char   : Del/Ctrl-d\n"
+                    " Insert line at cursor : Enter\n"
+                    " Delete to end of line : Ctrl-k\n"
+                    " Delete to BOL         : Ctrl-u\n")
+        try:
+            curses.curs_set(0)
+        except _curses.error:
+            pass
         txt = help_txt.split('\n')
-        lines = min(self.max_win_size_y, len(txt) + 2)
-        cols = min(self.max_win_size_x, max([len(i) for i in txt]) + 2)
+        lines = len(txt) + 1
+        cols = max([len(i) for i in txt]) + 2
         # Only print help text if the window is big enough
         try:
             popup = curses.newwin(lines, cols, 0, 0)
-            addstr(popup, 1, 1, help_txt)
+            addstr(popup, 1, 0, help_txt)
             popup.box()
-        except:
+        except _curses.error:
             pass
         else:
             while not popup.getch():
@@ -640,10 +646,6 @@ class Editor(object):
                 self.display()
         except KeyboardInterrupt:
             self.text = self.text_orig
-        try:
-            curses.curs_set(0)
-        except:
-            print('Invisible cursor not supported.')
         return "\n".join(["".join(i) for i in self.text])
 
     def display(self):
@@ -654,10 +656,14 @@ class Editor(object):
         y_idx = display_idx = 0
         done = False
         for para in self.text:
-            for line in para:
+            for line_idx, line in enumerate(para):
                 if y_idx >= self.y_offset and display_idx < self.win_size_y:
                     if not self.pw_mode:
                         addstr(self.stdscr, display_idx, 0, line)
+                    if len(self.text) > 1 and line_idx == len(para) - 1:
+                        # Show an end of paragraph marker on last line.
+                        self.stdscr.insch(display_idx, self.win_size_x - 1,
+                                          curses.ACS_LARROW)
                     display_idx += 1
                 elif display_idx >= self.win_size_y:
                     done = True
@@ -665,10 +671,6 @@ class Editor(object):
                 y_idx += 1
             if done is True:
                 break
-            if len(self.text) > 1:
-                # Show an end of paragraph marker.
-                self.stdscr.insch(display_idx - 1, self.win_size_x - 1,
-                                  curses.ACS_LARROW)
 
     def close(self):
         self.text = self.text_orig

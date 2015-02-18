@@ -7,6 +7,7 @@ import curses
 import _curses
 import curses.ascii
 import locale
+import os
 import string
 import sys
 from collections import namedtuple
@@ -73,6 +74,10 @@ class Editor(object):
 
     def __init__(self, scr, title="", inittext="", win_location=(0, 0),
                  win_size=(20, 80), box=True, max_paragraphs=0, pw_mode=False):
+        # Fix for python curses resize bug:
+        # http://bugs.python.org/issue2675
+        os.unsetenv('LINES')
+        os.unsetenv('COLUMNS')
         self.scr = scr
         self.title_orig = title
         if sys.version_info.major < 3:
@@ -687,6 +692,7 @@ def main(stdscr, **kwargs):
 
 
 def editor(**kwargs):
+    os.environ['ESCDELAY'] = '25'
     if sys.version_info.major < 3:
         lc_all = locale.getlocale(locale.LC_ALL)
         locale.setlocale(locale.LC_ALL, '')

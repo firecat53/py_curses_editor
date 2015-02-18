@@ -109,6 +109,7 @@ class Editor(object):
                 pass
         else:
             self.keys_init()
+            curses.curs_set(1)
         self.display()
 
     def __call__(self):
@@ -388,15 +389,23 @@ class Editor(object):
         self._set_buffer_idx_x()
 
     def page_up(self):
+        if self.cur_pos_y > 0 and self.y_offset == 0:
+            self.cur_pos_y = 0
         self.y_offset = max(0, self.y_offset - self.win_size_y)
         self._set_buffer_idx_y()
         self._set_buffer_idx_x()
 
     def page_down(self):
-        self.y_offset = min(self.buffer_rows - self.win_size_y - 1,
+        if len(self.flattened_text) < self.win_size_y and \
+                self.y_offset == 0:
+            self.cur_pos_y = len(self.flattened_text) - 1
+        elif self.cur_pos_y < self.win_size_y and \
+                self.y_offset >= self.buffer_rows - self.win_size_y:
+            self.cur_pos_y = self.win_size_y - 1
+        self.y_offset = min(self.buffer_rows - self.win_size_y,
                             self.y_offset + self.win_size_y)
         # Corrects negative offsets
-        #self.y_offset = max(0, self.y_offset)
+        self.y_offset = max(0, self.y_offset)
         self._set_buffer_idx_y()
         self._set_buffer_idx_x()
 
@@ -548,7 +557,7 @@ class Editor(object):
         if self.max_paragraphs == 1:
             # Save and quit for single-line entries
             return False
-        if len(self.text) >= self.max_paragraphs:
+        if 0 < self.max_paragraphs <= len(self.text):
             return
         p_idx, _, c_idx = self.paragraph
         newline = self.line[c_idx:]

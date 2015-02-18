@@ -59,6 +59,9 @@ class Editor(object):
                             lines _will be truncated_!
         pw_mode:        True/False. Whether or not to show text entry
                             (e.g. for passwords)
+        edit:           True/False. Default is True for editor. Use False
+                            to have a scrollable popup window.
+
     Returns:
         text:   text string
 
@@ -73,7 +76,8 @@ class Editor(object):
     """
 
     def __init__(self, scr, title="", inittext="", win_location=(0, 0),
-                 win_size=(20, 80), box=True, max_paragraphs=0, pw_mode=False):
+                 win_size=(20, 80), box=True, max_paragraphs=0, pw_mode=False,
+                 edit=True):
         # Fix for python curses resize bug:
         # http://bugs.python.org/issue2675
         os.unsetenv('LINES')
@@ -87,6 +91,7 @@ class Editor(object):
         self.box = box
         self.max_paragraphs = max_paragraphs
         self.pw_mode = pw_mode
+        self.edit = edit
         self.win_location_orig_y, self.win_location_orig_x = win_location
         self.win_size_orig_y, self.win_size_orig_x = win_size
         self.win_size_y = self.win_size_orig_y
@@ -96,7 +101,14 @@ class Editor(object):
         self.win_init()
         self.box_init()
         self.text_init(inittext)
-        self.keys_init()
+        if self.edit is False:
+            self.keys_init_noedit()
+            try:
+                curses.curs_set(0)
+            except _curses.error:
+                pass
+        else:
+            self.keys_init()
         self.display()
 
     def __call__(self):
@@ -264,6 +276,33 @@ class Editor(object):
             CTRL('p'):                      self.up,
         }
 
+    def keys_init_noedit(self):
+        """Define methods for each key for non-editing mode.
+
+        """
+        self.keys = {
+            curses.ascii.ETX:               self.close,
+            curses.KEY_DOWN:                self.down_noedit,
+            CTRL('n'):                      self.down_noedit,
+            'j':                            self.down_noedit,
+            curses.KEY_F1:                  self.help,
+            curses.KEY_NPAGE:               self.page_down,
+            'J':                            self.page_down,
+            CTRL('f'):                      self.page_up,
+            curses.KEY_PPAGE:               self.page_up,
+            'K':                            self.page_up,
+            CTRL('b'):                      self.page_up,
+            CTRL('x'):                      self.quit,
+            curses.KEY_F2:                  self.quit,
+            curses.KEY_F3:                  self.quit_nosave,
+            curses.ascii.ESC:               self.quit_nosave,
+            curses.KEY_RESIZE:              self.resize,
+            -1:                             self.resize,
+            curses.KEY_UP:                  self.up_noedit,
+            CTRL('p'):                      self.up_noedit,
+            'k':                            self.up_noedit,
+        }
+
     def _title_init(self):
         """Initialze box title and help string
 
@@ -321,6 +360,9 @@ class Editor(object):
         self._set_buffer_idx_y()
         self._set_buffer_idx_x()
 
+    def up_noedit(self):
+        self.y_offset = max(0, self.y_offset - 1)
+
     def down(self):
         if self.cur_pos_y < self.win_size_y - 1 and \
                 self.buffer_idx_y < len(self.flattened_text) - 1:
@@ -332,6 +374,10 @@ class Editor(object):
                                 self.y_offset + 1)
         self._set_buffer_idx_y()
         self._set_buffer_idx_x()
+
+    def down_noedit(self):
+        self.y_offset = min(self.buffer_rows - self.win_size_y,
+                            self.y_offset + 1)
 
     def end(self):
         self.cur_pos_x = self.buf_line_length
@@ -350,7 +396,7 @@ class Editor(object):
         self.y_offset = min(self.buffer_rows - self.win_size_y - 1,
                             self.y_offset + self.win_size_y)
         # Corrects negative offsets
-        self.y_offset = max(0, self.y_offset)
+        #self.y_offset = max(0, self.y_offset)
         self._set_buffer_idx_y()
         self._set_buffer_idx_x()
 
@@ -592,17 +638,23 @@ class Editor(object):
                     " Insert line at cursor : Enter\n"
                     " Delete to end of line : Ctrl-k\n"
                     " Delete to BOL         : Ctrl-u\n")
+        help_txt_no = (" Save and exit         : F2,F3,ESC,Ctrl-c or Ctrl-x\n"
+                       " Cursor movement       : Arrow keys/j-k/Ctrl-n/p\n"
+                       " Page Up/Page Down     : J/K/PgUp/PgDn/Ctrl-b/n\n")
+        if self.edit is False:
+            help_txt = help_txt_no
+        txt = help_txt.splitlines()
         try:
             curses.curs_set(0)
         except _curses.error:
             pass
-        txt = help_txt.split('\n')
-        lines = len(txt) + 1
+        lines = len(txt) + 2
         cols = max([len(i) for i in txt]) + 2
         # Only print help text if the window is big enough
         try:
-            popup = curses.newwin(lines, cols, 0, 0)
-            addstr(popup, 1, 0, help_txt)
+            popup = curses.newwin(lines, cols, self.win_location_y,
+                                  self.win_location_x)
+            addstr(popup, 1, 0, "\n".join(txt))
             popup.box()
         except _curses.error:
             pass
@@ -611,7 +663,7 @@ class Editor(object):
                 pass
         finally:
             # Turn back on the cursor
-            if self.pw_mode is False:
+            if self.pw_mode is False and self.edit is True:
                 curses.curs_set(1)
             # flushinp Needed to prevent spurious F1 characters being written
             # to line
@@ -653,7 +705,8 @@ class Editor(object):
                 if y_idx >= self.y_offset and display_idx < self.win_size_y:
                     if not self.pw_mode:
                         addstr(self.stdscr, display_idx, 0, line)
-                    if len(self.text) > 1 and line_idx == len(para) - 1:
+                    if len(self.text) > 1 and line_idx == len(para) - 1 \
+                            and self.edit is True:
                         # Show an end of paragraph marker on last line.
                         self.stdscr.insch(display_idx, self.win_size_x - 1,
                                           curses.ACS_LARROW)
@@ -682,7 +735,8 @@ class Editor(object):
         try:
             loop = self.keys[c]()
         except KeyError:
-            self.insert_char(c)
+            if self.edit is True:
+                self.insert_char(c)
             loop = True
         return loop
 

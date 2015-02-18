@@ -52,9 +52,9 @@ class Editor(object):
         win_location:   tuple (y,x) for location of upper left corner
         win_size:       tuple (rows,cols) size of the editor window
         box:            True/False whether to outline editor with a box
-        max_text_rows:  maximum rows allowed for text.
+        max_paragraphs: maximum paragraphs (text separated by \n) allowed.
                             Default=0 (unlimited)
-                            If initext is longer than max_text_rows, extra
+                            If initext is longer than max_paragraphs, extra
                             lines _will be truncated_!
         pw_mode:        True/False. Whether or not to show text entry
                             (e.g. for passwords)
@@ -67,13 +67,12 @@ class Editor(object):
 
     Usage: (from curses application with a defined curses window object)
         from editor.editor import Editor
-        Editor(stdscr, win_size=(1,80), pw_mod=True, max_text_rows=1)()
+        Editor(stdscr, win_size=(1,80), pw_mod=True, max_paragraphs=1)()
 
     """
 
     def __init__(self, scr, title="", inittext="", win_location=(0, 0),
-                 win_size=(20, 80), box=True, max_text_size=0,
-                 max_text_rows=0, pw_mode=False):
+                 win_size=(20, 80), box=True, max_paragraphs=0, pw_mode=False):
         self.scr = scr
         self.title_orig = title
         if sys.version_info.major < 3:
@@ -81,13 +80,14 @@ class Editor(object):
             self.title_orig = str(self.title_orig, encoding=enc)
             inittext = str(inittext, encoding=enc)
         self.box = box
-        self.max_text_rows = max_text_rows
+        self.max_paragraphs = max_paragraphs
         self.pw_mode = pw_mode
-        self.resize_flag = False
-        self.win_location_y, self.win_location_x = win_location
+        self.win_location_orig_y, self.win_location_orig_x = win_location
         self.win_size_orig_y, self.win_size_orig_x = win_size
         self.win_size_y = self.win_size_orig_y
         self.win_size_x = self.win_size_orig_x
+        self.win_location_y = self.win_location_orig_y
+        self.win_location_x = self.win_location_orig_x
         self.win_init()
         self.box_init()
         self.text_init(inittext)
@@ -106,7 +106,6 @@ class Editor(object):
         """
         # self.cur_pos is the current y,x position of the cursor relative to
         # the visible area of the box
-        self.title, self.title_help = self._title_init()
         self.cur_pos_y = 0
         self.cur_pos_x = 0
         # y_offset controls the up-down scrolling feature
@@ -115,24 +114,23 @@ class Editor(object):
         # (self.flattend_text)
         self.buffer_idx_y = 0
         self.buffer_idx_x = 0
-        # Adjust win_size if resizing
-        if self.resize_flag is True:
-            self.win_size_x += 1
-            self.win_size_y += 1
-            self.resize_flag = False
         # Make sure requested window size is < available window size
         self.max_win_size_y, self.max_win_size_x = self.scr.getmaxyx()
+        # Keep the input box inside the physical window
+        self.win_size_y = min(self.win_size_orig_y, self.max_win_size_y)
+        self.win_size_x = min(self.win_size_orig_x, self.max_win_size_x)
+        # Validate win_location settings
+        self.win_location_x = min(max(0, self.max_win_size_x -
+                                      self.win_size_x),
+                                  self.win_location_orig_x)
+        self.win_location_y = min(max(0, self.max_win_size_y -
+                                      self.win_size_y),
+                                  self.win_location_orig_y)
         # Adjust max_win_size for different possible offsets
-        # (e.g. if there is a title and/or a box)
-        if self.box and self.title:
-            self.max_win_size_y = max(0, self.max_win_size_y - 3)
-            self.max_win_size_x = max(0, self.max_win_size_x - 2)
-        elif self.box:
-            self.max_win_size_y = max(0, self.max_win_size_y - 2)
-            self.max_win_size_x = max(0, self.max_win_size_x - 2)
-        elif self.title:
-            self.max_win_size_y = max(0, self.max_win_size_y - 1)
+        # (e.g. if there is a title and/or a box) and initiate the curses
+        # screen(s)
         self._win_scr_init()
+        self.title, self.title_help = self._title_init()
         self.stdscr.keypad(1)
         try:
             curses.use_default_colors()
@@ -151,42 +149,30 @@ class Editor(object):
             self.boxscr - for the box outline and title, if applicable
 
         """
-        # Keep the input box inside the physical window
-        if (self.win_size_y > self.max_win_size_y or
-                self.win_size_y < self.win_size_orig_y):
-            self.win_size_y = self.max_win_size_y
-        if (self.win_size_x > self.max_win_size_x or
-                self.win_size_x < self.win_size_orig_x):
-            self.win_size_x = self.max_win_size_x
-        # Validate win_location settings
-        if self.win_size_x + self.win_location_x >= self.max_win_size_x:
-            self.win_location_x = max(0, self.max_win_size_x -
-                                      self.win_size_x)
-        if self.win_size_y + self.win_location_y >= self.max_win_size_y:
-            self.win_location_y = max(0, self.max_win_size_y -
-                                      self.win_size_y)
         # Create an extra window for the box outline and/or title, if required
-        x_off = y_off = loc_off_y = loc_off_x = 0
+        self.x_off = self.y_off = loc_off_y = loc_off_x = 0
         if self.box:
             # Compensate for the box lines
-            y_off += 2
-            x_off += 2
-            # The box is drawn outside the initially called win_location
+            self.y_off += 2
+            self.x_off += 2
+            # The text box location is offset because of the box
             loc_off_y += 1
             loc_off_x += 1
-        if self.title:
-            y_off += 1
+        if self.title_orig:
+            self.y_off += 1
             loc_off_y += 1
-        if self.box is True or self.title:
+        if self.box is True or self.title_orig:
             # Make box/title screen bigger than actual text area (stdscr)
-            self.boxscr = self.scr.subwin(self.win_size_y + y_off,
-                                          self.win_size_x + x_off,
+            self.boxscr = self.scr.subwin(self.win_size_y,
+                                          self.win_size_x,
                                           self.win_location_y,
                                           self.win_location_x)
-            self.stdscr = self.boxscr.subwin(self.win_size_y,
-                                             self.win_size_x,
-                                             self.win_location_y + loc_off_y,
-                                             self.win_location_x + loc_off_x)
+            self.win_size_y = max(1, self.win_size_y - self.y_off)
+            self.win_size_x = max(1, self.win_size_x - self.x_off)
+            self.stdscr = self.scr.subwin(self.win_size_y,
+                                          self.win_size_x,
+                                          self.win_location_y + loc_off_y,
+                                          self.win_location_x + loc_off_x)
         else:
             self.stdscr = self.scr.subwin(self.win_size_y,
                                           self.win_size_x,
@@ -205,9 +191,9 @@ class Editor(object):
         self.text = [self._text_wrap(i) or [""]
                      for i in text.splitlines() or [""]]
         self.text_orig = list(self.text)
-        if self.max_text_rows:
-            # Truncates initial text if max_text_rows < len(self.text)
-            self.text = self.text[:self.max_text_rows]
+        if self.max_paragraphs:
+            # Truncates initial text if max_paragraphs < len(self.text)
+            self.text = self.text[:self.max_paragraphs]
 
     def box_init(self):
         """Clear the main screen and redraw the box and/or title
@@ -280,7 +266,7 @@ class Editor(object):
         self.title = self.title_orig[:self.win_size_x]
         if len(self.title) >= self.win_size_x:
             self.title = self.title[:-3] + ".."
-        if self.max_text_rows == 1:
+        if self.max_paragraphs == 1:
             quick_help = "   F2/Enter/^x: Save, F3/ESC/^c: Cancel"
         else:
             quick_help = "   F2/^x: Save, F3/ESC/^c: Cancel"
@@ -508,10 +494,10 @@ class Editor(object):
         and exits.
 
         """
-        if self.max_text_rows == 1:
+        if self.max_paragraphs == 1:
             # Save and quit for single-line entries
             return False
-        if len(self.flattened_text) == self.max_text_rows:
+        if len(self.text) >= self.max_paragraphs:
             return
         p_idx, _, c_idx = self.paragraph
         newline = self.line[c_idx:]
@@ -628,10 +614,12 @@ class Editor(object):
             self.box_init()
 
     def resize(self):
-        self.resize_flag = True
-        self.win_init()
-        self.box_init()
-        self.text_init("\n".join(["".join(i) for i in self.text]))
+        """Handle window resizing."""
+        if curses.is_term_resized(self.max_win_size_y, self.max_win_size_x):
+            self.win_init()
+            self.box_init()
+            self.text = [self._text_wrap(i) for i in self.text]
+            curses.resizeterm(self.max_win_size_y, self.max_win_size_x)
 
     def run(self):
         """Main program loop.
@@ -680,6 +668,9 @@ class Editor(object):
 
     def get_key(self):
         c = self.stdscr.getch()
+        if c == curses.KEY_RESIZE:
+            self.resize()
+            return True
         # 127 and 27 are to make sure the Backspace/ESC keys work properly
         if 0 < c < 256 and c != 127 and c != 27:
             c = chr(c)

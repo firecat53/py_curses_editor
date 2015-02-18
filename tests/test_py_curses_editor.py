@@ -50,5 +50,10 @@ class TestIntegration(unittest.TestCase):
                        win_location=(0, 0), win_size=(100, 400),
                        box=True)
 
+    def test_3(self):
+        curses.wrapper(self.main, title=str1, inittext=str2,
+                       edit=False)
+
+
 if __name__ == '__main__':
     unittest.main()

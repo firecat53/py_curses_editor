@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+import setuptools
 
 setup(name="py_curses_editor",
-      version="1.1.0",
+      version="1.2.0",
       description="A configurable curses text editor window",
       long_description=open('README.rst').read(),
       author="Scott Hansen",
       author_email="firecat4153@gmail.com",
       url="https://github.com/firecat53/py_curses_editor",
-      download_url="https://github.com/firecat53/py_curses_editor/tarball/1.1.0",
+      download_url="https://github.com/firecat53/py_curses_editor/tarball/1.2.0",
       packages=['editor'],
       package_data={'editor': ['README.rst']},
       data_files=[('share/doc/py_curses_editor',
@@ -31,5 +32,5 @@ setup(name="py_curses_editor",
           'Topic :: Text Editors',
           'Topic :: Utilities',
       ],
-      keywords='editor console curses',
+      keywords='editor console curses utility',
       )

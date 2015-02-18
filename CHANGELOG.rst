@@ -1,4 +1,4 @@
-*Version 1.2.0 2015/02/18*
+*Version 1.2.1 2015/02/18*
 
  - Word wrapping
  - Handle terminal resizing

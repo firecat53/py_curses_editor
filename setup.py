@@ -4,17 +4,17 @@ from distutils.core import setup
 import setuptools
 
 setup(name="py_curses_editor",
-      version="1.2.0",
+      version="1.2.1",
       description="A configurable curses text editor window",
       long_description=open('README.rst').read(),
       author="Scott Hansen",
       author_email="firecat4153@gmail.com",
       url="https://github.com/firecat53/py_curses_editor",
-      download_url="https://github.com/firecat53/py_curses_editor/tarball/1.2.0",
+      download_url="https://github.com/firecat53/py_curses_editor/tarball/1.2.1",
       packages=['editor'],
       package_data={'editor': ['README.rst']},
       data_files=[('share/doc/py_curses_editor',
-                   ['README.rst', 'LICENSE.txt'])],
+                   ['README.rst', 'LICENSE.txt', 'CHANGELOG.rst'])],
       license="MIT",
       classifiers=[
           'Development Status :: 4 - Beta',

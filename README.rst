@@ -18,6 +18,7 @@ Features:
 * Text box can have a title and/or an outlined box
 * Text box can be initialized with existing text to edit
 * Password mode for hiding text entries
+* Paste in large blocks of text from primary clipboard
 * Pop-up help menu
 
 Requires: 
@@ -64,4 +65,15 @@ Keybindings:
 **Delete/Ctrl-d**        Delete character under cursor
 **Backspace/Ctrl-h**     Delete character to left
 **Ctrl-k/u**             Delete to end/beginning of-line
+**Ctrl-v**               Paste a block of text from primary clipboard
+                           (requires xclip or xsel)
 =====================    ===================================================
+
+Notes:
+------
+
+Using shift-insert to paste text will be quite slow, as it's pasting one
+character at a time. Use Ctrl-v to paste a large block of text from the primary
+clipboard.
+
+Double-width characters are not yet supported.

@@ -11,6 +11,7 @@ import os
 import string
 import sys
 from collections import namedtuple
+from subprocess import Popen, PIPE
 from textwrap import wrap
 
 
@@ -265,6 +266,7 @@ class Editor(object):
             CTRL('b'):                      self.left,
             curses.KEY_NPAGE:               self.page_down,
             curses.KEY_PPAGE:               self.page_up,
+            CTRL('v'):                      self.paste,
             CTRL('x'):                      self.quit,
             curses.KEY_F2:                  self.quit,
             curses.KEY_F3:                  self.quit_nosave,
@@ -624,6 +626,53 @@ class Editor(object):
         self.line = start + end
         self._char_index_to_yx(para_idx, char_idx - self.buffer_idx_x)
 
+    def paste(self):
+        """Use xsel or xclip if available to paste and process a large chunk of
+        text all at once.
+
+        """
+        res = ""
+        try:
+            os.environ['DISPLAY']
+        except KeyError:
+            return
+        for cmd in (['xclip', '-o', '-selection', 'primary'],
+                    ['xsel', '-o', '--primary']):
+            try:
+                res = Popen(cmd, stdout=PIPE,
+                            universal_newlines=True).communicate()[0]
+            except IOError:
+                continue
+            else:
+                break
+        para_idx, line_idx, char_idx = self.paragraph
+        if not res:
+            return
+        if sys.version_info.major < 3:
+            enc = locale.getpreferredencoding() or 'utf-8'
+            res = str(res, encoding=enc)
+        res = res.splitlines()
+        if len(res) == 1:
+            line = list(self.line)
+            cur_line_paste = list(res[0])
+            line[char_idx:char_idx] = cur_line_paste
+            char_idx += len(cur_line_paste)
+            self.line = "".join(line)
+        else:
+            line = list(self.line)
+            beg_line = line[:char_idx]
+            end_line = "".join(line[char_idx:])
+            first_line_paste = list(res[0])
+            beg_line.extend(first_line_paste)
+            self.line = "".join(beg_line)
+            ins = [self._text_wrap(i) for i in res[1:]]
+            self.text[para_idx + 1:para_idx + 1] = ins
+            para_idx += len(res[1:])
+            self.text[para_idx].append(end_line)
+            self.text[para_idx] = self._text_wrap(self.text[para_idx])
+            char_idx = sum(len(i) for i in self.text[para_idx])
+        self._char_index_to_yx(para_idx, char_idx)
+
     def quit(self):
         return False
 
@@ -645,6 +694,7 @@ class Editor(object):
                     " Backspace/Delete      : Backspace/Ctrl-h\n"
                     " Delete current char   : Del/Ctrl-d\n"
                     " Insert line at cursor : Enter\n"
+                    " Paste block of text   : Ctrl-v\n"
                     " Delete to end of line : Ctrl-k\n"
                     " Delete to BOL         : Ctrl-u\n")
         help_txt_no = (" Save and exit         : F2,F3,ESC,Ctrl-c or Ctrl-x\n"

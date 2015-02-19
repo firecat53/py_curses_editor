@@ -296,6 +296,7 @@ class Editor(object):
             'K':                            self.page_up,
             CTRL('b'):                      self.page_up,
             CTRL('x'):                      self.quit,
+            'q':                            self.quit,
             curses.KEY_F2:                  self.quit,
             curses.KEY_F3:                  self.quit_nosave,
             curses.ascii.ESC:               self.quit_nosave,
@@ -313,8 +314,10 @@ class Editor(object):
         self.title = self.title_orig[:self.win_size_x]
         if len(self.title) >= self.win_size_x:
             self.title = self.title[:-3] + ".."
-        if self.max_paragraphs == 1:
+        if self.max_paragraphs == 1 and self.edit is True:
             quick_help = "   F2/Enter/^x: Save, F3/ESC/^c: Cancel"
+        elif self.edit is False:
+            quick_help = "   q/F2/^c: Quit, j/k: Scroll up/down"
         else:
             quick_help = "   F2/^x: Save, F3/ESC/^c: Cancel"
         if len(self.title) + len(quick_help) > self.win_size_x - 2:
@@ -697,9 +700,9 @@ class Editor(object):
                     " Paste block of text   : Ctrl-v\n"
                     " Delete to end of line : Ctrl-k\n"
                     " Delete to BOL         : Ctrl-u\n")
-        help_txt_no = (" Save and exit         : F2,F3,ESC,Ctrl-c or Ctrl-x\n"
-                       " Cursor movement       : Arrow keys/j-k/Ctrl-n/p\n"
-                       " Page Up/Page Down     : J/K/PgUp/PgDn/Ctrl-b/n\n")
+        help_txt_no = (" Quit                : q,F2,F3,ESC,Ctrl-c or Ctrl-x\n"
+                       " Cursor movement     : Arrow keys/j-k/Ctrl-n/p\n"
+                       " Page Up/Page Down   : J/K/PgUp/PgDn/Ctrl-b/n\n")
         if self.edit is False:
             help_txt = help_txt_no
         txt = help_txt.splitlines()

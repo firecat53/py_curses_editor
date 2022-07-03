@@ -680,6 +680,7 @@ class Editor(object):
         return False
 
     def quit_nosave(self):
+        self.edit = False  # Used to detect that quit_nosave was triggered
         self.text = self.text_orig
         return False
 

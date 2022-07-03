@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
-import setuptools
+from setuptools import setup
 
 setup(name="py_curses_editor",
-      version="1.2.1",
+      version="1.3.0",
       description="A configurable curses text editor window",
-      long_description=open('README.rst').read(),
+      long_description=open('README.md').read(),
+      long_description_content_type='text/markdown',
       author="Scott Hansen",
       author_email="firecat4153@gmail.com",
       url="https://github.com/firecat53/py_curses_editor",
-      download_url="https://github.com/firecat53/py_curses_editor/tarball/1.2.1",
+      download_url="https://github.com/firecat53/py_curses_editor/tarball/1.3.0",
       packages=['editor'],
-      package_data={'editor': ['README.rst']},
+      package_data={'editor': ['README.md']},
       data_files=[('share/doc/py_curses_editor',
-                   ['README.rst', 'LICENSE.txt', 'CHANGELOG.rst'])],
+                   ['README.md', 'LICENSE.txt', 'CHANGELOG.md'])],
       license="MIT",
       classifiers=[
           'Development Status :: 4 - Beta',
@@ -25,10 +25,7 @@ setup(name="py_curses_editor",
           'License :: OSI Approved :: MIT License',
           'Operating System :: OS Independent',
           'Programming Language :: Python',
-          'Programming Language :: Python :: 2.7',
-          'Programming Language :: Python :: 3.2',
-          'Programming Language :: Python :: 3.3',
-          'Programming Language :: Python :: 3.4',
+          'Programming Language :: Python :: 3',
           'Topic :: Text Editors',
           'Topic :: Utilities',
       ],

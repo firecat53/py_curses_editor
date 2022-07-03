@@ -1,10 +1,9 @@
 """Py_curses_editor
 
-Copyright (c) 2015, Scott Hansen <firecat4153@gmail.com>
+Copyright (c) 2022, Scott Hansen <firecat4153@gmail.com>
 
 """
 import curses
-import _curses
 import curses.ascii
 import locale
 import os
@@ -13,29 +12,20 @@ import sys
 from collections import namedtuple
 from subprocess import Popen, PIPE
 from textwrap import wrap
+import _curses
 
 
-if sys.version_info.major < 3:
-    # Python 2.7 shim
-    str = unicode
+def CTRL(key):
+    """ Args: key
 
-    def CTRL(key):
-        return curses.ascii.ctrl(bytes(key))
+    """
+    return curses.ascii.ctrl(key)
 
-    def addstr(*args):
-        scr, args = args[0], list(args[1:])
-        x = 2 if len(args) > 2 else 0
-        args[x] = args[x].encode(sys.stdout.encoding)
-        return scr.addstr(*args)
 
-else:
-    # Python 3 wrappers
-    def CTRL(key):
-        return curses.ascii.ctrl(key)
-
-    def addstr(*args):
-        scr, args = args[0], args[1:]
-        return scr.addstr(*args)
+def addstr(*args):
+    """ Wrapper """
+    scr, args = args[0], args[1:]
+    return scr.addstr(*args)
 
 
 class Editor(object):
@@ -85,10 +75,6 @@ class Editor(object):
         os.unsetenv('COLUMNS')
         self.scr = scr
         self.title_orig = title
-        if sys.version_info.major < 3:
-            enc = locale.getpreferredencoding() or 'utf-8'
-            self.title_orig = str(self.title_orig, encoding=enc)
-            inittext = str(inittext, encoding=enc)
         self.box = box
         self.max_paragraphs = max_paragraphs
         self.pw_mode = pw_mode
@@ -811,16 +797,7 @@ def main(stdscr, **kwargs):
 
 def editor(**kwargs):
     os.environ['ESCDELAY'] = '25'
-    if sys.version_info.major < 3:
-        lc_all = locale.getlocale(locale.LC_ALL)
-        locale.setlocale(locale.LC_ALL, '')
-    else:
-        lc_all = None
-    try:
-        return curses.wrapper(main, **kwargs)
-    finally:
-        if lc_all is not None:
-            locale.setlocale(locale.LC_ALL, lc_all)
+    return curses.wrapper(main, **kwargs)
 
 
 editor.__doc__ = Editor.__doc__

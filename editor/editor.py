@@ -759,7 +759,7 @@ class Editor(object):
         """Display the editor window and the current contents.
 
         """
-        self.stdscr.clear()
+        self.stdscr.erase()
         y_idx = display_idx = 0
         done = False
         for para in self.text:
@@ -779,6 +779,7 @@ class Editor(object):
                 y_idx += 1
             if done is True:
                 break
+        self.stdscr.refresh()
 
     def close(self):
         self.text = self.text_orig

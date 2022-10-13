@@ -23,8 +23,9 @@ Python 3+
 
 ## Installation
 
-* `# python setup.py install`  OR
-* `$ python setup.py install --user`
+* `# pip install py_curses_editor`  OR
+* `$ pip install --user py_curses_editor` OR
+* `$ pip install --user -e .` (install from local git clone for development)
 
 ## License
 

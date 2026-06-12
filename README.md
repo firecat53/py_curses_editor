@@ -1,5 +1,8 @@
 # py_curses_editor  
 
+> NOTE: Code moved to https://git.firecat53.me/firecat53/py_curses_editor.
+> Github repo maintained as a read-only mirror.
+
 Python curses text editor module. Provides a configurable pop-up window for
 entering text, passwords, etc.
 
